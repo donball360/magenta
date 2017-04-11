@@ -31,7 +31,7 @@
 #define CMPCT_DEBUG
 #endif
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 #define ALLOC_FILL 0x99
 #define FREE_FILL 0x77

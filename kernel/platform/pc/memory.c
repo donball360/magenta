@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <err.h>
+#include <kernel/cmdline.h>
 #include <kernel/vm.h>
 #include <platform/pc/bootloader.h>
 #include <magenta/boot/multiboot.h>
@@ -14,7 +15,7 @@
 
 #include "platform_p.h"
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 /* multiboot information passed in, if present */
 extern multiboot_info_t *_multiboot_info;
@@ -81,6 +82,9 @@ static void boot_addr_range_reset(boot_addr_range_t *range)
 static int mem_arena_init(boot_addr_range_t *range)
 {
     int used = 0;
+    uint64_t memory_limit = cmdline_get_uint64("kernel.memory_limit", UINT64_MAX);
+    memory_limit = ROUNDDOWN(memory_limit, PAGE_SIZE);
+    LTRACEF("memory limit set to %0" PRIx64 " bytes\n", memory_limit);
 
     for (range->reset(range), range->advance(range);
          !range->is_reset && used < PMM_ARENAS;
@@ -92,10 +96,18 @@ static int mem_arena_init(boot_addr_range_t *range)
         if (!range->is_mem)
             continue;
 
+        if (memory_remaining == 0)
+            continue;
+
         /* trim off parts of memory ranges that are smaller than a page */
         uint64_t base = ROUNDUP(range->base, PAGE_SIZE);
         uint64_t size = ROUNDDOWN(range->base + range->size, PAGE_SIZE) -
                 base;
+
+        if (size > memory_remaining) {
+            size = memory_remaining;
+        }
+        memory_remaining -= size;
 
         /* trim any memory below 1MB for safety and SMP booting purposes */
         if (base < 1*MB) {
@@ -171,6 +183,7 @@ static void e820_range_reset(boot_addr_range_t *range)
 
 static void e820_range_advance(boot_addr_range_t *range)
 {
+    TRACE_ENTRY;
     e820_range_seq_t *seq = (e820_range_seq_t *)(range->seq);
 
     seq->index++;
@@ -190,6 +203,7 @@ static void e820_range_advance(boot_addr_range_t *range)
 
 static int e820_range_init(boot_addr_range_t *range, e820_range_seq_t *seq)
 {
+    TRACE_ENTRY;
     range->seq = seq;
     range->advance = &e820_range_advance;
     range->reset = &e820_range_reset;
